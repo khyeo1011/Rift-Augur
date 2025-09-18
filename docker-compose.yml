@@ -1,0 +1,29 @@
+version: '3.8'
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - REDIS_HOST=redis
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+    volumes:
+      - ./src:/app
+    depends_on:
+      - redis
+      - dynamodb-local
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+
+  dynamodb-local:
+    image: "amazon/dynamodb-local:latest"
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /data"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./dynamodb_data:/data
+    working_dir: /home/dynamodblocal
+
