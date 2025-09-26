@@ -36,10 +36,43 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
         .btn {
-            @apply px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75 transition-all duration-200;
+            padding-left: 1rem;
+            padding-right: 1rem;
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+            background-color: #4f46e5; /* indigo-600 */
+            color: #fff;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            outline: none;
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            background-color: #4338ca; /* indigo-700 */
+        }
+        .btn:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px #818cf8; /* indigo-400 */
         }
         .input {
-            @apply w-full px-3 py-2 bg-accent text-text-primary rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500;
+            width: 100%;
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
+            padding-top: 0.5rem;
+            padding-bottom: 0.5rem;
+            background-color: #ebf2ff; /* bg-accent */
+            color: #021844; /* text-gray-900 */
+            border-radius: 0.375rem; /* rounded-md */
+            outline: none;
+            transition: box-shadow 0.2s;
+        }
+        .input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px #6366f1; /* focus:ring-2 focus:ring-indigo-500 */
+        }
+        .input::placeholder {
+            color: #373838; /* highlight color */
         }
         .notification {
             animation: fadeIn 0.5s ease-in-out;
@@ -57,12 +90,9 @@
             <p class="text-text-secondary mt-2">Manage your game's matchmaking queue and player data.</p>
         </header>
 
-        <!-- Main Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-            <!-- Left Column: Matchmaking & Stats -->
             <div class="lg:col-span-2 space-y-8">
-                <!-- Matchmaking Card -->
                 <div class="card">
                     <h2 class="text-2xl font-bold mb-4">Matchmaking</h2>
                     <div id="matchmaking-form" class="space-y-4">
@@ -72,15 +102,22 @@
                                 <input type="text" id="player-id" class="input" placeholder="e.g., player_123">
                             </div>
                             <div>
-                                <label for="mmr" class="block text-sm font-medium text-highlight mb-1">MMR</label>
+                                <label for="mmr" class="block text-sm font-medium text-highlight mb-1">MMR (defaults to 1000)</label>
                                 <input type="number" id="mmr" class="input" placeholder="e.g., 1500">
                             </div>
                         </div>
-                        <button id="join-queue-btn" class="btn w-full sm:w-auto">Join Queue</button>
+                        <div class="flex items-center gap-4">
+                            <button id="join-queue-btn" class="btn">Join Queue</button>
+                            <div>
+                                <label for="existing-players" class="block text-sm font-medium text-highlight mb-1">Or select existing player</label>
+                                <select id="existing-players" class="input">
+                                    <option value="">-- Select Player --</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Player Stats Card -->
                 <div class="card">
                     <h2 class="text-2xl font-bold mb-4">Player Stats</h2>
                     <div class="flex space-x-4 mb-4">
@@ -92,7 +129,6 @@
                     </div>
                 </div>
 
-                 <!-- Match Simulator Card -->
                  <div class="card">
                     <h2 class="text-2xl font-bold mb-4">Match Simulator</h2>
                     <p class="text-highlight mb-4">Simulate a match result. Use player IDs from a 'Match Found' notification.</p>
@@ -100,13 +136,27 @@
                         <p class="text-highlight">Waiting for a match to be found...</p>
                     </div>
                 </div>
+                 <div class="card">
+                    <h2 class="text-2xl font-bold mb-4">Recent Matches</h2>
+                    <div id="recent-matches-display" class="space-y-3 max-h-96 overflow-y-auto">
+                        <p class="text-highlight">No recent matches to display.</p>
+                    </div>
+                </div>
             </div>
 
-            <!-- Right Column: Real-time Notifications -->
-            <div class="lg:col-span-1 card">
-                <h2 class="text-2xl font-bold mb-4">Real-time Notifications</h2>
-                <div id="notifications" class="space-y-3 h-96 overflow-y-auto pr-2">
-                   <p class="text-highlight text-sm">Waiting for server events...</p>
+            <div class="lg:col-span-1 space-y-8">
+                <div class="card">
+                    <h2 class="text-2xl font-bold mb-4">Current Queue</h2>
+                    <div id="queue-display" class="space-y-2 h-48 overflow-y-auto pr-2">
+                        <p class="text-highlight text-sm">No players in queue.</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="text-2xl font-bold mb-4">Real-time Notifications</h2>
+                    <div id="notifications" class="space-y-3 h-96 overflow-y-auto pr-2">
+                       <p class="text-highlight text-sm">Waiting for server events...</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -124,13 +174,16 @@
         const playerStatsDisplay = document.getElementById('player-stats-display');
         const notificationsLog = document.getElementById('notifications');
         const matchSimulatorDisplay = document.getElementById('match-simulator-display');
+        const existingPlayersSelect = document.getElementById('existing-players');
+        const queueDisplay = document.getElementById('queue-display');
+        const recentMatchesDisplay = document.getElementById('recent-matches-display');
 
         // --- API Functions ---
         async function joinQueue() {
             const playerId = playerIdInput.value;
-            const mmr = parseInt(mmrInput.value, 10);
-            if (!playerId || isNaN(mmr)) {
-                alert('Please enter a valid Player ID and MMR.');
+            const mmr = mmrInput.value ? parseInt(mmrInput.value, 10) : 1000;
+            if (!playerId) {
+                alert('Please enter a Player ID.');
                 return;
             }
 
@@ -145,6 +198,8 @@
                 playerIdInput.value = '';
                 mmrInput.value = '';
                 logNotification(`Player ${playerId} joined the queue.`, 'info');
+                updateQueueDisplay();
+                populateExistingPlayers();
             } catch (error) {
                 console.error('Error joining queue:', error);
                 logNotification('Failed to join queue.', 'error');
@@ -185,9 +240,59 @@
                 console.log('Report match result response:', data);
                 logNotification(`Match ${matchId} result reported.`, 'info');
                 matchSimulatorDisplay.innerHTML = `<p class="text-highlight">Waiting for a new match to be found...</p>`;
+                updateRecentMatches(); // Refresh recent matches list
             } catch(error) {
                  console.error('Error reporting match result:', error);
                  logNotification('Failed to report match result.', 'error');
+            }
+        }
+
+        async function populateExistingPlayers() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/players`);
+                const players = await response.json();
+                existingPlayersSelect.innerHTML = '<option value="">-- Select Player --</option>';
+                players.forEach(player => {
+                    const option = document.createElement('option');
+                    option.value = player.player_id;
+                    option.textContent = player.player_id;
+                    existingPlayersSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error fetching existing players:', error);
+            }
+        }
+
+        async function updateQueueDisplay() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/queue/players`);
+                const players = await response.json();
+                if (players.length > 0) {
+                    queueDisplay.innerHTML = players.map(p => `<div class="text-sm"><strong>${p.player_id}</strong> (MMR: ${p.mmr})</div>`).join('');
+                } else {
+                    queueDisplay.innerHTML = '<p class="text-highlight text-sm">No players in queue.</p>';
+                }
+            } catch (error) {
+                console.error('Error updating queue display:', error);
+            }
+        }
+
+        async function updateRecentMatches() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/matches/recent`);
+                const matches = await response.json();
+                if (matches.length > 0) {
+                    recentMatchesDisplay.innerHTML = matches.map(match => `
+                        <div class="p-2 bg-primary rounded">
+                            <p class="text-sm font-bold text-green-400">WINNERS: ${match.winner_team.join(', ')}</p>
+                            <p class="text-sm text-red-400">LOSERS: ${match.loser_team.join(', ')}</p>
+                        </div>
+                    `).join('');
+                } else {
+                    recentMatchesDisplay.innerHTML = '<p class="text-highlight">No recent matches to display.</p>';
+                }
+            } catch(error) {
+                console.error('Error updating recent matches:', error);
             }
         }
 
@@ -205,16 +310,20 @@
         }
 
         function setupMatchSimulator(matchDetails) {
-            const { match_id, players } = matchDetails;
-            // For a 2 player match
-            const teamA = [players[0]];
-            const teamB = [players[1]];
+            const { match_id, team_a, team_b } = matchDetails;
 
             matchSimulatorDisplay.innerHTML = `
-                <p>Match Found: ${players.join(' vs ')}</p>
-                <div class="flex flex-wrap gap-4">
-                    <button class="btn btn-sm" onclick="reportMatchResult('${match_id}', ['${teamA.join("','")}'], ['${teamB.join("','")}'])">${teamA.join(', ')} Wins</button>
-                    <button class="btn btn-sm" onclick="reportMatchResult('${match_id}', ['${teamB.join("','")}'], ['${teamA.join("','")}'])">${teamB.join(', ')} Wins</button>
+                <div>
+                    <h4 class="font-bold">Team A</h4>
+                    <p>${team_a.join(', ')}</p>
+                </div>
+                <div>
+                    <h4 class="font-bold">Team B</h4>
+                    <p>${team_b.join(', ')}</p>
+                </div>
+                <div class="flex flex-wrap gap-4 mt-4">
+                    <button class="btn btn-sm" onclick="reportMatchResult('${match_id}', ['${team_a.join("','")}'], ['${team_b.join("','")}'])">Team A Wins</button>
+                    <button class="btn btn-sm" onclick="reportMatchResult('${match_id}', ['${team_b.join("','")}'], ['${team_a.join("','")}'])">Team B Wins</button>
                 </div>
             `;
         }
@@ -225,6 +334,9 @@
             if (event.key === 'Enter') {
                 getPlayerStats();
             }
+        });
+        existingPlayersSelect.addEventListener('change', (event) => {
+            playerIdInput.value = event.target.value;
         });
 
 
@@ -240,9 +352,10 @@
                 console.log("SSE message received:", event.data);
                 const data = JSON.parse(event.data);
                 if (data.match_id) {
-                    const message = `Match Found! ID: ${data.match_id} | Players: ${data.players.join(', ')}`;
+                    const message = `Match Found! ID: ${data.match_id}`;
                     logNotification(message, 'match');
                     setupMatchSimulator(data);
+                    updateQueueDisplay(); // Update queue after match is found
                 }
             };
 
@@ -257,6 +370,10 @@
         // --- Initial Load ---
         document.addEventListener('DOMContentLoaded', () => {
             initializeSSE();
+            populateExistingPlayers();
+            updateQueueDisplay();
+            updateRecentMatches();
+            setInterval(updateQueueDisplay, 5000); // Refresh queue every 5 seconds
         });
     </script>
 </body>
