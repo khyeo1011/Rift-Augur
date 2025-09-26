@@ -32,7 +32,7 @@ Rift Augur is a backend platform tailored for League of Legends, providing intel
 - Adds a Summoner to the matchmaking queue.
 - **Body:**
   ```json
-  { "summoner_name": "string", "rank": "string", "role": "string", "champion_pool": ["Ahri", "Lee Sin"], "mmr": integer }
+  { "summoner_name": "string", "summoner_id" : "string", "rank": "string", "role": "string", "champion_pool": ["Ahri", "Lee Sin"], "mmr": integer }
   ```
 - **Response:**
   ```json

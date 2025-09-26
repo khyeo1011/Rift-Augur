@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matchmaking & Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#1a202c',
+                        'secondary': '#2d3748',
+                        'accent': '#4a5568',
+                        'highlight': '#a0aec0',
+                        'text-primary': '#e2e8f0',
+                        'text-secondary': '#cbd5e0',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #1a202c;
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        .card {
+            background-color: #2d3748;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .btn {
+            @apply px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75 transition-all duration-200;
+        }
+        .input {
+            @apply w-full px-3 py-2 bg-accent text-text-primary rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500;
+        }
+        .notification {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+    <div class="max-w-6xl mx-auto space-y-8">
+        <header class="text-center">
+            <h1 class="text-3xl sm:text-4xl font-bold text-text-primary">Intelligent Gaming Matchmaking Dashboard 🎮</h1>
+            <p class="text-text-secondary mt-2">Manage your game's matchmaking queue and player data.</p>
+        </header>
+
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <!-- Left Column: Matchmaking & Stats -->
+            <div class="lg:col-span-2 space-y-8">
+                <!-- Matchmaking Card -->
+                <div class="card">
+                    <h2 class="text-2xl font-bold mb-4">Matchmaking</h2>
+                    <div id="matchmaking-form" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="player-id" class="block text-sm font-medium text-highlight mb-1">Player ID</label>
+                                <input type="text" id="player-id" class="input" placeholder="e.g., player_123">
+                            </div>
+                            <div>
+                                <label for="mmr" class="block text-sm font-medium text-highlight mb-1">MMR</label>
+                                <input type="number" id="mmr" class="input" placeholder="e.g., 1500">
+                            </div>
+                        </div>
+                        <button id="join-queue-btn" class="btn w-full sm:w-auto">Join Queue</button>
+                    </div>
+                </div>
+
+                <!-- Player Stats Card -->
+                <div class="card">
+                    <h2 class="text-2xl font-bold mb-4">Player Stats</h2>
+                    <div class="flex space-x-4 mb-4">
+                        <input type="text" id="search-player-id" class="input" placeholder="Enter Player ID to search">
+                        <button id="search-btn" class="btn">Search</button>
+                    </div>
+                    <div id="player-stats-display" class="p-4 bg-primary rounded-lg min-h-[100px]">
+                        <p class="text-highlight">Search for a player to see their stats.</p>
+                    </div>
+                </div>
+
+                 <!-- Match Simulator Card -->
+                 <div class="card">
+                    <h2 class="text-2xl font-bold mb-4">Match Simulator</h2>
+                    <p class="text-highlight mb-4">Simulate a match result. Use player IDs from a 'Match Found' notification.</p>
+                    <div id="match-simulator-display" class="space-y-4">
+                        <p class="text-highlight">Waiting for a match to be found...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Real-time Notifications -->
+            <div class="lg:col-span-1 card">
+                <h2 class="text-2xl font-bold mb-4">Real-time Notifications</h2>
+                <div id="notifications" class="space-y-3 h-96 overflow-y-auto pr-2">
+                   <p class="text-highlight text-sm">Waiting for server events...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:5000';
+
+        // --- DOM Elements ---
+        const joinQueueBtn = document.getElementById('join-queue-btn');
+        const playerIdInput = document.getElementById('player-id');
+        const mmrInput = document.getElementById('mmr');
+        const searchBtn = document.getElementById('search-btn');
+        const searchPlayerIdInput = document.getElementById('search-player-id');
+        const playerStatsDisplay = document.getElementById('player-stats-display');
+        const notificationsLog = document.getElementById('notifications');
+        const matchSimulatorDisplay = document.getElementById('match-simulator-display');
+
+        // --- API Functions ---
+        async function joinQueue() {
+            const playerId = playerIdInput.value;
+            const mmr = parseInt(mmrInput.value, 10);
+            if (!playerId || isNaN(mmr)) {
+                alert('Please enter a valid Player ID and MMR.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/queue`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player_id: playerId, mmr: mmr })
+                });
+                const data = await response.json();
+                console.log('Join queue response:', data);
+                playerIdInput.value = '';
+                mmrInput.value = '';
+                logNotification(`Player ${playerId} joined the queue.`, 'info');
+            } catch (error) {
+                console.error('Error joining queue:', error);
+                logNotification('Failed to join queue.', 'error');
+            }
+        }
+
+        async function getPlayerStats() {
+            const playerId = searchPlayerIdInput.value;
+            if (!playerId) {
+                alert('Please enter a Player ID to search.');
+                return;
+            }
+            playerStatsDisplay.innerHTML = `<p class="text-highlight">Loading...</p>`;
+            try {
+                const response = await fetch(`${API_BASE_URL}/player/${playerId}/stats`);
+                const data = await response.json();
+                playerStatsDisplay.innerHTML = `
+                    <h3 class="font-bold text-lg">${data.player_id}</h3>
+                    <p><strong>MMR:</strong> ${data.mmr}</p>
+                    <p><strong>Wins:</strong> ${data.wins}</p>
+                    <p><strong>Losses:</strong> ${data.losses}</p>
+                    <p><strong>Preferred Characters:</strong> ${data.character_preferences.join(', ')}</p>
+                `;
+            } catch (error) {
+                console.error('Error getting player stats:', error);
+                playerStatsDisplay.innerHTML = `<p class="text-red-400">Could not fetch stats for ${playerId}.</p>`;
+            }
+        }
+
+        async function reportMatchResult(matchId, winnerTeam, loserTeam) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/matches/${matchId}/results`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ winner_team: winnerTeam, loser_team: loserTeam })
+                });
+                const data = await response.json();
+                console.log('Report match result response:', data);
+                logNotification(`Match ${matchId} result reported.`, 'info');
+                matchSimulatorDisplay.innerHTML = `<p class="text-highlight">Waiting for a new match to be found...</p>`;
+            } catch(error) {
+                 console.error('Error reporting match result:', error);
+                 logNotification('Failed to report match result.', 'error');
+            }
+        }
+
+        // --- UI Logic & Event Listeners ---
+        function logNotification(message, type = 'info') {
+             if (notificationsLog.querySelector('p')) {
+                notificationsLog.innerHTML = ''; // Clear initial message
+            }
+            const color = type === 'error' ? 'text-red-400' : (type === 'match') ? 'text-green-400 font-bold' : 'text-text-secondary';
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `notification text-sm ${color}`;
+            logEntry.innerHTML = `[${time}] ${message}`;
+            notificationsLog.prepend(logEntry);
+        }
+
+        function setupMatchSimulator(matchDetails) {
+            const { match_id, players } = matchDetails;
+            // For a 2 player match
+            const teamA = [players[0]];
+            const teamB = [players[1]];
+
+            matchSimulatorDisplay.innerHTML = `
+                <p>Match Found: ${players.join(' vs ')}</p>
+                <div class="flex flex-wrap gap-4">
+                    <button class="btn btn-sm" onclick="reportMatchResult('${match_id}', ['${teamA.join("','")}'], ['${teamB.join("','")}'])">${teamA.join(', ')} Wins</button>
+                    <button class="btn btn-sm" onclick="reportMatchResult('${match_id}', ['${teamB.join("','")}'], ['${teamA.join("','")}'])">${teamB.join(', ')} Wins</button>
+                </div>
+            `;
+        }
+
+        joinQueueBtn.addEventListener('click', joinQueue);
+        searchBtn.addEventListener('click', getPlayerStats);
+        searchPlayerIdInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                getPlayerStats();
+            }
+        });
+
+
+        // --- Server-Sent Events (SSE) for Real-time Notifications ---
+        function initializeSSE() {
+            const eventSource = new EventSource(`${API_BASE_URL}/stream`);
+
+            eventSource.onopen = () => {
+                logNotification('Connected to server for real-time events.', 'info');
+            };
+
+            eventSource.onmessage = (event) => {
+                console.log("SSE message received:", event.data);
+                const data = JSON.parse(event.data);
+                if (data.match_id) {
+                    const message = `Match Found! ID: ${data.match_id} | Players: ${data.players.join(', ')}`;
+                    logNotification(message, 'match');
+                    setupMatchSimulator(data);
+                }
+            };
+
+            eventSource.onerror = (err) => {
+                console.error('EventSource failed:', err);
+                logNotification('Connection to server lost. Trying to reconnect...', 'error');
+                eventSource.close();
+                setTimeout(initializeSSE, 5000); // Attempt to reconnect every 5 seconds
+            };
+        }
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeSSE();
+        });
+    </script>
+</body>
+</html>
