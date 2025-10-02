@@ -1,4 +1,4 @@
-# Rift Augur: League of Legends Edition
+# Rift Augur: A tool for League of Legends
 
 Rift Augur is a backend platform tailored for League of Legends, providing intelligent matchmaking, player analytics, and real-time notifications. It is designed to enhance the player experience by leveraging advanced data analysis and scalable infrastructure, specifically for the League of Legends ecosystem.
 
