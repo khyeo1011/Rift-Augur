@@ -1,5 +1,5 @@
 services:
-  web:
+  web: # This is the Flask backend
     build: .
     ports:
       - "5000:5000"
@@ -11,6 +11,17 @@ services:
     depends_on:
       - redis
       - dynamodb-local
+
+  frontend: # This is the React frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+    depends_on:
+      - web
 
   redis:
     image: "redis:alpine"
@@ -25,4 +36,3 @@ services:
     volumes:
       - ./dynamodb_data:/data
     working_dir: /home/dynamodblocal
-
