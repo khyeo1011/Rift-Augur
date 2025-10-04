@@ -19,7 +19,7 @@ def create_app():
         REDIS_PORT=int(os.environ.get("REDIS_PORT", 6379)),
         DYNAMODB_ENDPOINT=os.environ.get("DYNAMODB_ENDPOINT", "http://localhost:8000"),
         AWS_REGION="us-west-2",
-        MATCH_SIZE=10  # Number of players required for a match
+
     )
 
     # --- Service Connections ---
@@ -62,106 +62,91 @@ def create_app():
         app.logger.error(f"Could not connect to DynamoDB: {e}")
         dynamodb = None
 
-    # --- Helper Functions ---
-    def find_match():
-        """
-        More robust matchmaking logic for 10 players.
-        """
-        queue_name = 'matchmaking_queue'
-        if not redis_client:
-            return None
 
-        if redis_client.zcard(queue_name) >= app.config['MATCH_SIZE']:
-            players_to_match = redis_client.zrange(queue_name, 0, app.config['MATCH_SIZE'] - 1)
-            if players_to_match:
-                match_id = str(uuid.uuid4())
-                team_a = players_to_match[:5]
-                team_b = players_to_match[5:]
-                app.logger.info(f"Match found! ID: {match_id} with Team A: {team_a} and Team B: {team_b}")
-                redis_client.zrem(queue_name, *players_to_match)
-                match_details = {"match_id": match_id, "team_a": team_a, "team_b": team_b}
-                redis_client.publish('match_notifications', json.dumps(match_details))
-                return match_details
-        return None
 
     # --- API Endpoints ---
     @app.route('/')
     def index():
-        return jsonify({"message": "Intelligent Gaming Matchmaking & Analytics Platform is running!"})
+        return jsonify({"message": "Rift Augur is running!"})
 
-    @app.route('/queue', methods=['POST'])
-    def join_queue():
-        """Adds a player to the matchmaking queue."""
-        data = request.get_json()
-        if not data or 'player_id' not in data:
-            return jsonify({"error": "player_id is required"}), 400
 
-        player_id = data['player_id']
-        mmr = data.get('mmr', 1000)
 
-        if not isinstance(mmr, int):
-            return jsonify({"error": "mmr must be an integer"}), 400
-        if not redis_client or not dynamodb:
-            return jsonify({"error": "A database connection is not available"}), 503
+    @app.route('/players', methods=['GET', 'POST', 'PUT'])
+    def handle_players():
+        if request.method == 'POST':
+            data = request.get_json()
+            if not data or 'player_id' not in data or 'rank' not in data:
+                return jsonify({"error": "player_id and rank are required"}), 400
 
-        try:
+            player_id = data['player_id']
+            rank = data['rank']
+
+            if not dynamodb:
+                return jsonify({"error": "DynamoDB connection not available"}), 503
+
             table = dynamodb.Table('PlayerProfiles')
-            # Create a new player profile if it doesn't exist.
             try:
                 table.put_item(
                     Item={
                         'player_id': player_id,
-                        'mmr': mmr,
+                        'rank': rank,
                         'wins': 0,
                         'losses': 0,
                         'character_preferences': ['DefaultChar']
                     },
                     ConditionExpression='attribute_not_exists(player_id)'
                 )
-                app.logger.info(f"Created new player profile for {player_id}")
+                return jsonify({"status": f"player {player_id} added"}), 201
             except ClientError as e:
                 if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                    # Player already exists, update their MMR for matchmaking.
-                    table.update_item(Key={'player_id': player_id}, UpdateExpression="SET mmr = :m", ExpressionAttributeValues={':m': mmr})
-                    app.logger.info(f"Updated MMR for existing player {player_id}")
+                    return jsonify({"error": f"Player {player_id} already exists"}), 409
                 else:
-                    raise
+                    app.logger.error(f"DynamoDB error: {e.response['Error']['Message']}")
+                    return jsonify({"error": "Could not add player"}), 500
+        elif request.method == 'PUT':
+            data = request.get_json()
+            if not data or 'player_id' not in data or 'rank' not in data:
+                return jsonify({"error": "player_id and rank are required"}), 400
 
-            # Add player to the Redis queue
-            redis_client.zadd('matchmaking_queue', {player_id: mmr})
-            app.logger.info(f"Player {player_id} added to queue with MMR {mmr}")
-            find_match()
-            return jsonify({"status": f"player {player_id} added to queue"}), 200
-        except Exception as e:
-            app.logger.error(f"Error adding to queue: {e}")
-            return jsonify({"error": "Could not add player to queue"}), 500
+            player_id = data['player_id']
+            rank = data['rank']
 
-    @app.route('/queue/players', methods=['GET'])
-    def get_queue_players():
-        """Gets all players currently in the matchmaking queue."""
-        if not redis_client:
-            return jsonify({"error": "Redis connection not available"}), 503
+            if not dynamodb:
+                return jsonify({"error": "DynamoDB connection not available"}), 503
 
-        try:
-            players = redis_client.zrange('matchmaking_queue', 0, -1, withscores=True)
-            return jsonify([{"player_id": p[0], "mmr": int(p[1])} for p in players])
-        except Exception as e:
-            app.logger.error(f"Error getting queue players: {e}")
-            return jsonify({"error": "Could not retrieve queue players"}), 500
+            table = dynamodb.Table('PlayerProfiles')
+            try:
+                table.update_item(
+                    Key={'player_id': player_id},
+                    UpdateExpression="SET #r = :rank",
+                    ExpressionAttributeNames={'#r': 'rank'},
+                    ExpressionAttributeValues={':rank': rank},
+                    ConditionExpression='attribute_exists(player_id)'
+                )
+                return jsonify({"status": f"player {player_id} updated"}), 200
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                    return jsonify({"error": f"Player {player_id} not found"}), 404
+                else:
+                    app.logger.error(f"DynamoDB error: {e.response['Error']['Message']}")
+                    return jsonify({"error": "Could not update player"}), 500
+        else: # GET request
+            prefix = request.args.get('prefix')
+            if not dynamodb:
+                return jsonify({"error": "DynamoDB connection not available"}), 503
 
-    @app.route('/players', methods=['GET'])
-    def get_all_players():
-        """Gets all players from the database."""
-        if not dynamodb:
-            return jsonify({"error": "DynamoDB connection not available"}), 503
-
-        table = dynamodb.Table('PlayerProfiles')
-        try:
-            response = table.scan()
-            return jsonify(response.get('Items', []))
-        except ClientError as e:
-            app.logger.error(f"DynamoDB error: {e.response['Error']['Message']}")
-            return jsonify({"error": "Could not retrieve players"}), 500
+            table = dynamodb.Table('PlayerProfiles')
+            try:
+                if prefix:
+                    response = table.scan(
+                        FilterExpression=boto3.dynamodb.conditions.Attr('player_id').begins_with(prefix)
+                    )
+                else:
+                    response = table.scan()
+                return jsonify(response.get('Items', []))
+            except ClientError as e:
+                app.logger.error(f"DynamoDB error: {e.response['Error']['Message']}")
+                return jsonify({"error": "Could not retrieve players"}), 500
 
     @app.route('/player/<string:player_id>/stats', methods=['GET'])
     def get_player_stats(player_id):
@@ -169,108 +154,88 @@ def create_app():
         if not dynamodb:
             return jsonify({"error": "DynamoDB connection not available"}), 503
 
-        if redis_client:
-            cached_stats = redis_client.get(f"player_cache:{player_id}")
-            if cached_stats:
-                app.logger.info(f"Cache hit for player {player_id}")
-                return jsonify(json.loads(cached_stats)), 200
-
-        app.logger.info(f"Cache miss for player {player_id}")
         table = dynamodb.Table('PlayerProfiles')
         try:
             response = table.get_item(Key={'player_id': player_id})
             if 'Item' in response:
-                if redis_client:
-                    redis_client.setex(f"player_cache:{player_id}", 300, json.dumps(response['Item']))
                 return jsonify(response['Item']), 200
             else:
-                new_player = {
-                    'player_id': player_id,
-                    'mmr': 1000,
-                    'wins': 0,
-                    'losses': 0,
-                    'character_preferences': ['DefaultChar']
-                }
-                table.put_item(Item=new_player)
-                return jsonify(new_player), 201
+                return jsonify({"error": "Player not found"}), 404
         except ClientError as e:
             app.logger.error(f"DynamoDB error: {e.response['Error']['Message']}")
             return jsonify({"error": "Could not retrieve player stats"}), 500
 
-    @app.route('/matches/recent', methods=['GET'])
-    def get_recent_matches():
-        """Gets the last 10 matches from Redis."""
-        if not redis_client:
-            return jsonify({"error": "Redis connection not available"}), 503
-        try:
-            matches_json = redis_client.lrange('recent_matches', 0, 9)
-            matches = [json.loads(m) for m in matches_json]
-            return jsonify(matches)
-        except Exception as e:
-            app.logger.error(f"Error getting recent matches: {e}")
-            return jsonify({"error": "Could not retrieve recent matches"}), 500
 
-    @app.route('/matches/<string:match_id>/results', methods=['POST'])
-    def post_match_results(match_id):
-        """Updates player stats after a match."""
+
+
+
+
+
+    @app.route('/predict', methods=['POST'])
+    def predict_winner():
+        """Predicts the winner of a match based on average team rank."""
         data = request.get_json()
-        if not data or 'winner_team' not in data or 'loser_team' not in data:
-            return jsonify({"error": "winner_team and loser_team must be provided"}), 400
+        if not data or 'team_a' not in data or 'team_b' not in data:
+            return jsonify({"error": "team_a and team_b must be provided"}), 400
 
-        winner_team = data['winner_team']
-        loser_team = data['loser_team']
+        team_a = data['team_a']
+        team_b = data['team_b']
 
         if not dynamodb:
             return jsonify({"error": "DynamoDB connection not available"}), 503
 
         table = dynamodb.Table('PlayerProfiles')
-        try:
-            # Update winners and losers
-            for player_id in winner_team:
-                table.update_item(Key={'player_id': player_id}, UpdateExpression="SET wins = wins + :v, mmr = mmr + :c", ExpressionAttributeValues={':v': 1, ':c': 25})
-                if redis_client: redis_client.delete(f"player_cache:{player_id}")
-            for player_id in loser_team:
-                table.update_item(Key={'player_id': player_id}, UpdateExpression="SET losses = losses + :v, mmr = mmr - :c", ExpressionAttributeValues={':v': 1, ':c': 25})
-                if redis_client: redis_client.delete(f"player_cache:{player_id}")
-            
-            # Store match result in Redis for recent matches list
-            if redis_client:
-                match_result = {
-                    "match_id": match_id,
-                    "winner_team": winner_team,
-                    "loser_team": loser_team,
-                    "timestamp": datetime.utcnow().isoformat()
-                }
-                redis_client.lpush('recent_matches', json.dumps(match_result))
-                redis_client.ltrim('recent_matches', 0, 9) # Keep only the last 10 matches
 
-            return jsonify({"status": f"Match {match_id} results recorded"}), 200
-        except ClientError as e:
-            app.logger.error(f"Error updating match results: {e.response['Error']['Message']}")
-            return jsonify({"error": "Could not update player stats"}), 500
+        rank_map = {
+            "Iron": 0,
+            "Bronze": 1,
+            "Silver": 2,
+            "Gold": 3,
+            "Platinum": 4,
+            "Diamond": 5,
+            "Master": 6,
+            "Grandmaster": 7,
+            "Challenger": 8
+        }
 
-    @app.route('/stream')
-    def stream():
-        def event_stream():
-            if not redis_client:
-                app.logger.error("Redis not connected for SSE")
-                return
+        division_map = {
+            "I": 3,
+            "II": 2,
+            "III": 1,
+            "IV": 0
+        }
 
-            pubsub = redis_client.pubsub()
-            pubsub.subscribe('match_notifications')
-            app.logger.info("Client subscribed to SSE stream for 'match_notifications'")
-            try:
-                for message in pubsub.listen():
-                    if message['type'] == 'message':
-                        data = message['data']
-                        app.logger.info(f"SSE sending message: {data}")
-                        yield f"data: {data}\n\n"
-            except GeneratorExit:
-                app.logger.info("Client disconnected from SSE stream.")
-            finally:
-                pubsub.close()
+        def get_team_avg_rank(team):
+            total_rank = 0
+            for player_id in team:
+                try:
+                    response = table.get_item(Key={'player_id': player_id})
+                    if 'Item' in response:
+                        player_rank_str = response['Item'].get('rank', 'Bronze IV')
+                        parts = player_rank_str.split()
+                        rank = parts[0]
+                        division = parts[1] if len(parts) > 1 else ''
+                        rank_score = rank_map.get(rank, 1) * 4
+                        division_score = division_map.get(division, 0)
+                        total_rank += rank_score + division_score
+                    else:
+                        total_rank += 1 * 4 + 0 # Assume Bronze IV for players not in the database
+                except ClientError as e:
+                    app.logger.error(f"DynamoDB error: {e.response['Error']['Message']}")
+                    total_rank += 1 * 4 + 0 # Assume Bronze IV on error
+            return total_rank / len(team) if team else 0
 
-        return Response(event_stream(), mimetype='text/event-stream')
+        avg_rank_a = get_team_avg_rank(team_a)
+        avg_rank_b = get_team_avg_rank(team_b)
+
+        # Calculate win probability using the logistic function
+        k = 0.1 # Factor to control the steepness of the curve
+        prob_a = 1 / (1 + 10**(-k * (avg_rank_a - avg_rank_b)))
+        prob_b = 1 - prob_a
+
+        return jsonify({"team_a_win_prob": prob_a, "team_b_win_prob": prob_b})
+
+
 
     return app
 
